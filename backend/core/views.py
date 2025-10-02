@@ -1,10 +1,25 @@
-from rest_framework.generics import ListAPIView
-from .models import Movimentacao
-from .serializers import MovimentacaoSerializer
+from django.db import transaction
 
-class MovimentacaoListView(ListAPIView):
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.generics import ListAPIView
+
+from .models import Movimentacao, Correntista
+from .serializers import (
+    MovimentacaoSerializer,
+    OperacaoBasicaSerializer,
+    PagamentoSerializer,
+    TransferenciaSerializer
+)
+
+class ExtratoView(ListAPIView):
     """
-    Esta view exibe uma lista de todas as movimentações.
+    View para listar todas as movimentações de um correntista específico.
+    Acesso via /api/correntistas/<id>/extrato/
     """
-    queryset = Movimentacao.objects.select_related('correntista', 'correntista_beneficiario').all()
     serializer_class = MovimentacaoSerializer
+
+    def get_queryset(self):
+        correntista_id = self.kwargs['correntista_id']
+        return Movimentacao.objects.filter(correntista_id=correntista_id).order_by('-data_operacao')

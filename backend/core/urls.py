@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import MovimentacaoListView
+from .views import ExtratoView
 
 urlpatterns = [
-    path('movimentacoes/', MovimentacaoListView.as_view(), name='lista-movimentacoes'),
+    path('correntistas/<int:correntista_id>/extrato/', ExtratoView.as_view(), name='extrato-correntista'),
 ]
