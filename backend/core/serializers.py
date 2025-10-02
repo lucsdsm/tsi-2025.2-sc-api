@@ -34,7 +34,7 @@ class MovimentacaoSerializer(serializers.ModelSerializer): # Serializer para o m
             'correntista_beneficiario'
         ]
 
-class PagamentoSerializer(serializers.Serializer): # Serializer para operações de pagamento
+class PagamentoSerializer(OperacaoBasicaSerializer): # Serializer para operações de pagamento
     descricao = serializers.CharField(max_length=50)
 
 class TransferenciaSerializer(serializers.Serializer): # Serializer para operações de transferência
@@ -49,7 +49,7 @@ class TransferenciaSerializer(serializers.Serializer): # Serializer para operaç
         """ 
         Valida se os correntistas de origem e destino são diferentes. 
         """
-        
+
         if data['correntista_origem_id'] == data['correntista_destino_id']:
             raise serializers.ValidationError("Correntista de origem e destino devem ser diferentes.")
         return data
