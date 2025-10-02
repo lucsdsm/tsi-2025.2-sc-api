@@ -79,7 +79,6 @@ def transferencia_view(request):
     valor = dados['valor']
 
     try:
-        # Bloqueia ambas as linhas dos correntistas para evitar condições de corrida
         origem = Correntista.objects.select_for_update().get(pk=origem_id)
         destino = Correntista.objects.select_for_update().get(pk=destino_id)
 
@@ -110,3 +109,70 @@ def transferencia_view(request):
     
     except Correntista.DoesNotExist:
         return Response({"erro": "Correntista de origem ou destino não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    
+# 4. SAQUE
+@api_view(['POST'])
+@transaction.atomic
+def saque_view(request):
+    """
+    View para processar um saque (débito) de um correntista.
+    Espera um JSON com 'correntista_id' e 'valor'.
+    """
+    serializer = OperacaoBasicaSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    dados = serializer.validated_data
+    correntista_id = dados['correntista_id']
+    valor = dados['valor']
+
+    try:
+        correntista = Correntista.objects.select_for_update().get(pk=correntista_id)
+
+        if correntista.saldo < valor:
+            return Response({"erro": "Saldo insuficiente."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        correntista.saldo -= valor
+        correntista.save()
+
+        Movimentacao.objects.create(
+            tipo_operacao='D',
+            correntista=correntista,
+            valor_operacao=valor,
+            descricao="Saque realizado"
+        )
+        return Response({"sucesso": "Saque realizado com sucesso."}, status=status.HTTP_200_OK)
+    
+    except Correntista.DoesNotExist:
+        return Response({"erro": "Correntista não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    
+# 5. DEPÓSITO
+@api_view(['POST'])
+@transaction.atomic
+def deposito_view(request):
+    """
+    View para processar um depósito (crédito) em um correntista.
+    Espera um JSON com 'correntista_id' e 'valor'.
+    """
+    serializer = OperacaoBasicaSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    dados = serializer.validated_data
+    correntista_id = dados['correntista_id']
+    valor = dados['valor']
+
+    try:
+        correntista = Correntista.objects.select_for_update().get(pk=correntista_id)
+        
+        correntista.saldo += valor
+        correntista.save()
+
+        Movimentacao.objects.create(
+            tipo_operacao='C',
+            correntista=correntista,
+            valor_operacao=valor,
+            descricao="Depósito realizado"
+        )
+        return Response({"sucesso": "Depósito realizado com sucesso."}, status=status.HTTP_200_OK)
+    
+    except Correntista.DoesNotExist:
+        return Response({"erro": "Correntista não encontrado."}, status=status.HTTP_404_NOT_FOUND)

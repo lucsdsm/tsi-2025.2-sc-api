@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.core.validators import MinValueValidator
 from .models import Movimentacao, Correntista
 
-class OperacaoBasicaSerializer(serializers.Serializer): # Serializer básico para operações de crédito e débito
+class OperacaoBasicaSerializer(serializers.Serializer): # Serializer básico para operações de Crédito e Débito
     correntista_id = serializers.IntegerField()
     valor = serializers.DecimalField(
         max_digits=10, 
@@ -34,7 +34,7 @@ class MovimentacaoSerializer(serializers.ModelSerializer): # Serializer para o m
             'correntista_beneficiario'
         ]
 
-class PagamentoSerializer(OperacaoBasicaSerializer): # Serializer para operações de pagamento
+class PagamentoSerializer(OperacaoBasicaSerializer): # Serializer para operações de Pagamento
     descricao = serializers.CharField(max_length=50)
 
 class TransferenciaSerializer(serializers.Serializer): # Serializer para operações de transferência
