@@ -3,7 +3,6 @@ from django.core.validators import MinValueValidator
 from .models import Movimentacao, Correntista
 
 class OperacaoBasicaSerializer(serializers.Serializer): # Serializer básico para operações de Crédito e Débito
-    correntista_id = serializers.IntegerField()
     valor = serializers.DecimalField(
         max_digits=10, 
         decimal_places=2, 
@@ -35,10 +34,14 @@ class MovimentacaoSerializer(serializers.ModelSerializer): # Serializer para o m
         ]
 
 class PagamentoSerializer(OperacaoBasicaSerializer): # Serializer para operações de Pagamento
+    valor = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        validators=[MinValueValidator(0.01)]
+    )
     descricao = serializers.CharField(max_length=50)
 
 class TransferenciaSerializer(serializers.Serializer): # Serializer para operações de transferência
-    correntista_origem_id = serializers.IntegerField()
     correntista_destino_id = serializers.IntegerField()
     valor = serializers.DecimalField(
         max_digits=10, 
@@ -46,10 +49,4 @@ class TransferenciaSerializer(serializers.Serializer): # Serializer para operaç
         validators=[MinValueValidator(0.01)])
     
     def validate(self, data):
-        """ 
-        Valida se os correntistas de origem e destino são diferentes. 
-        """
-
-        if data['correntista_origem_id'] == data['correntista_destino_id']:
-            raise serializers.ValidationError("Correntista de origem e destino devem ser diferentes.")
         return data

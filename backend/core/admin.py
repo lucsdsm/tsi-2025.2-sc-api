@@ -1,3 +1,6 @@
 from django.contrib import admin
+from .models import Correntista, Movimentacao
 
-# Register your models here.
+admin.site.register(Correntista)
+admin.site.register(Movimentacao)
+

@@ -22,8 +22,10 @@ class ExtratoView(ListAPIView):
     serializer_class = MovimentacaoSerializer
 
     def get_queryset(self):
-        correntista_id = self.kwargs['correntista_id']
-        return Movimentacao.objects.filter(correntista_id=correntista_id).order_by('-data_operacao')
+        # Pega o correntista associado ao usuário que fez a requisição
+        correntista = self.request.user.correntista
+        # Filtra as movimentações apenas para esse correntista
+        return Movimentacao.objects.filter(correntista=correntista).order_by('-data_operacao')
     
 # 2. PAGAMENTO
 @api_view(['POST'])
@@ -37,13 +39,11 @@ def pagamento_view(request):
     serializer.is_valid(raise_exception=True)
 
     dados = serializer.validated_data
-    correntista_id = dados['correntista_id']
     valor = dados['valor']
     descricao = dados['descricao']
 
     try:
-        # select_for_update bloqueia a linha do correntista para evitar condições de corrida
-        correntista = Correntista.objects.select_for_update().get(pk=correntista_id)
+        correntista = Correntista.objects.select_for_update().get(user=request.user)
 
         if correntista.saldo < valor:
             return Response({"erro": "Saldo insuficiente."}, status=status.HTTP_400_BAD_REQUEST)
@@ -74,37 +74,42 @@ def transferencia_view(request):
     serializer.is_valid(raise_exception=True)
 
     dados = serializer.validated_data
-    origem_id = dados['correntista_origem_id']
     destino_id = dados['correntista_destino_id']
     valor = dados['valor']
 
     try:
-        origem = Correntista.objects.select_for_update().get(pk=origem_id)
+        correntista_origem = Correntista.objects.select_for_update().get(user=request.user)
         destino = Correntista.objects.select_for_update().get(pk=destino_id)
 
-        if origem.saldo < valor:
+        if correntista_origem.id == destino_id:
+            return Response({"erro": "A conta de origem e destino não podem ser a mesma."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        correntista_destino = Correntista.objects.select_for_update().get(pk=destino_id)
+
+        if correntista_origem.saldo < valor:
             return Response({"erro": "Saldo insuficiente no correntista de origem."}, status=status.HTTP_400_BAD_REQUEST)
         
-        origem.saldo -= valor
-        destino.saldo += valor
-
-        origem.save()
-        destino.save()
+        correntista_origem.saldo -= valor
+        correntista_destino.saldo += valor
 
         Movimentacao.objects.create(
             tipo_operacao='D',
-            correntista=origem,
+            correntista=correntista_origem,
             valor_operacao=valor,
-            descricao=f"Transferência para {destino.nome_correntista}",
-            correntista_beneficiario=destino
+            descricao=f"Transferência para {correntista_destino.nome_correntista}",
+            correntista_beneficiario=correntista_destino
         )
         Movimentacao.objects.create(
             tipo_operacao='C',
-            correntista=destino,
+            correntista=correntista_destino,
             valor_operacao=valor,
-            descricao=f"Transferência de {origem.nome_correntista}",
-            correntista_beneficiario=origem
+            descricao=f"Transferência de {correntista_origem.nome_correntista}",
+            correntista_beneficiario=correntista_origem
         )
+
+        correntista_origem.save()
+        correntista_destino.save()
+
         return Response({"sucesso": "Transferência realizada com sucesso."}, status=status.HTTP_200_OK)
     
     except Correntista.DoesNotExist:
@@ -122,11 +127,10 @@ def saque_view(request):
     serializer.is_valid(raise_exception=True)
 
     dados = serializer.validated_data
-    correntista_id = dados['correntista_id']
     valor = dados['valor']
 
     try:
-        correntista = Correntista.objects.select_for_update().get(pk=correntista_id)
+        correntista = Correntista.objects.select_for_update().get(user=request.user)
 
         if correntista.saldo < valor:
             return Response({"erro": "Saldo insuficiente."}, status=status.HTTP_400_BAD_REQUEST)
@@ -157,11 +161,10 @@ def deposito_view(request):
     serializer.is_valid(raise_exception=True)
 
     dados = serializer.validated_data
-    correntista_id = dados['correntista_id']
     valor = dados['valor']
 
     try:
-        correntista = Correntista.objects.select_for_update().get(pk=correntista_id)
+        correntista = Correntista.objects.select_for_update().get(user=request.user)
         
         correntista.saldo += valor
         correntista.save()

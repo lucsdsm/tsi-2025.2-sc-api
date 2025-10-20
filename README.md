@@ -2,11 +2,12 @@
 
 Este projeto é uma API RESTful desenvolvida em Django e Django REST Framework para gerenciar movimentações bancárias. A aplicação é totalmente containerizada com Docker, utilizando um banco de dados PostgreSQL.
 
-Por ora, a API expõe um endpoint que lista todas as movimentações financeiras cadastradas, simulando um extrato bancário.
+Esta versão (v3) implementa uma autenticação segura baseada em Token (TokenAuthentication). Todos os endpoints de operações financeiras são protegidos, permitindo que apenas usuários autenticados acessem e gerenciem seus próprios dados.
 
 ## Tecnologias utilizadas
 
 - Backend: Django, Django REST Framework
+- Autenticação: DRF Token Authentication
 - Banco de Dados: PostgreSQL
 - Containerização: Docker, Docker Compose
 - Linguagem: Python 3.11
@@ -17,6 +18,7 @@ Para executar este projeto, você precisará ter instalado em sua máquina:
 - Docker
 - Docker Compose (geralmente já vem com o Docker Desktop)
 - Git (para clonar o repositório)
+- Uma ferramenta de cliente de API, como Postman ou Insomnia. (Necessário para testar a API autenticada).
 
 Nenhuma outra dependência (Python, Django, PostgreSQL) precisa ser instalada localmente. Todo o ambiente é gerenciado pelo Docker.
 
@@ -32,109 +34,155 @@ Nenhuma outra dependência (Python, Django, PostgreSQL) precisa ser instalada lo
     
         - O comando docker-compose up irá ler o arquivo docker-compose.yml, construir a imagem da aplicação Django (web), baixar a imagem do PostgreSQL (db) e iniciar ambos os serviços.
 
-3. Criar as tabelas no bBanco (Migrations)
+3. Criar as tabelas no banco (migrations)
     - Em um novo terminal, com os containers em execução, rode o comando para que o Django crie as tabelas no banco de dados com base nos modelos definidos:
 
         ```docker-compose exec web python manage.py migrate```
 
-4. (Opcional) Popular o banco com dados de exemplo
-- Para que a API retorne alguns dados, você pode inserir os registros de exemplo diretamente no banco de dados.
-Execute o comando abaixo para acessar o cliente psql dentro do container do banco:
+4. Criar Usuários e Contas (Novo Fluxo)
+- Como a API agora é segura, precisamos criar logins de usuário e associá-los às suas respectivas contas de correntista.
 
-    ```docker-compose exec db psql -U admin -d api-db```
+    4.1 Crie os usuários
+    - Vamos criar dois usuários de exemplo (joao e maria). Você será solicitado a definir uma senha para cada um.
 
-    Agora, copie e cole o bloco SQL a seguir no terminal do psql e pressione Enter:
+    ###### Crie o primeiro usuário
+    ```docker-compose exec web python manage.py createsuperuser```
 
-    ```
-    -- Inserindo Correntistas
-    INSERT INTO core_correntista (nome_correntista, saldo) VALUES ('João Silva', 1500.00);
-    INSERT INTO core_correntista (nome_correntista, saldo) VALUES ('Maria Oliveira', 2500.50);
-    INSERT INTO core_correntista (nome_correntista, saldo) VALUES ('Carlos Pereira', 800.75);
-    ```
+    ###### Crie o segundo usuário
+    ```docker-compose exec web python manage.py createsuperuser```
+    <br> <br>
 
-    Para sair do psql, digite \q e pressione Enter.
+    4.2 Crie as contas de correntista (via Admin) <br>
+    - 4.2.1: Acesse a interface de administração do Django no seu navegador: http://localhost:8000/admin/
+    - 4.2.2: Faça login com o primeiro usuário que você criou (ex: joao).
+    - 4.2.3: Na seção "CORE", clique em "Correntistas" e depois em "ADD CORRENTISTA".
+    - 4.2.4: Preencha os campos com os dados: 
+        - User: Selecione o usuário joao na lista.
+        - Nome correntista: João Silva
+        - Saldo: 1500.00
+        - Clique em "Save".
+    - 4.2.5: Faça logout (canto superior direito), e faça login com o segundo usuário (ex: maria).
+    - 4.2.6: Repita o processo: vá em "Correntistas", clique em "ADD CORRENTISTA":
+        - User: Selecione o usuário maria.
+        - Nome correntista: Maria Oliveira
+        - Saldo: 2500.00
+        - Clique em "Save".
+
+    Ao salvar, anote o ID de cada correntista (a URL no admin irá mostrar, ex: .../core/correntista/2/change/). Vamos assumir que Maria é a Correntista de ID 2.
 
 ## Testando a API
 
-**1. Exibir o Extrato (GET):**
-- Busca todas as movimentações de um correntista específico.
-    - URL: ```http://localhost:8000/api/correntistas/1/extrato/```
+Todos os endpoints de operações agora são protegidos. O teste deve ser feito com um cliente de API (Postman, Insomnia) e segue um fluxo de 2 etapas:
 
-    - Método: **GET**
+1. Obter um Token de Autenticação.
+2. Usar esse Token para acessar os endpoints protegidos. <br> <br>
 
-- Abra a URL acima diretamente no seu navegador. Você verá uma página com a lista de movimentações do correntista de ID 1, formatada em JSON.
-
-**2. Operação de Depósito (POST):**
-- Adiciona um valor ao saldo de um correntista.
-
-    - URL: ```http://localhost:8000/api/depositar/```
+**Etapa 1: Obter seu Token de Autenticação**
+- Para se autenticar como joao, envie uma requisição POST para o endpoint de login.
     - Método: **POST**
+    - URL: ```http://localhost:8000/api/api-token-auth/```
+    - Corpo (Body) JSON:
+        ```
+        {
+            "username": "joao", 
+            "password": "sua_senha_aqui"
+        }
+        ```
 
-- Acesse a URL http://localhost:8000/api/depositar/ no seu navegador. No campo "Content", cole o seguinte JSON para depositar R$ 200,00 na conta do correntista de ID 1:
+    A API irá responder com seu token de acesso:
+    - Resposta (Response) JSON:
+        ```
+        {
+            "token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        }
+        ```
 
+    Copie este valor do token. Ele será usado em todas as requisições seguintes.
+
+**Etapa 2: Acessar os Endpoints Protegidos**
+- Para todas as requisições abaixo, você deve adicionar um Cabeçalho (Header) de autenticação. A API saberá quem você é (ex: joao) através deste token.
+
+    - Header Key: ```Authorization```
+    - Header Value: ```Token a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2```
+
+
+### 1. Exibir o Extrato (GET)
+Busca o extrato de movimentações do usuário autenticado (dono do token).
+
+- URL: ```http://localhost:8000/api/extrato/```
+- Método: ```GET```
+- Cabeçalho (Header): 
+    - Header Key: ```Authorization```
+    - Header Value: ```Token a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2```
+
+### 2. Operação de Depósito (POST)
+Adiciona um valor ao saldo do usuário autenticado.
+
+- URL: ```http://localhost:8000/api/depositar/```
+- Método: ```POST```
+- Cabeçalho (Header): 
+    - Header Key: ```Authorization```
+    - Header Value: ```Token a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2```
+- Corpo (Body) JSON: <br> <br>
     ```
     {
-        "correntista_id": 1,
-        "valor": "200.00"
+        "valor": 200.00
     }
     ```
-- Clique no botão POST. Você deverá receber uma mensagem de sucesso.
 
-**3. Operação de Saque (POST)**
-- Subtrai um valor do saldo de um correntista.
+### 3. Operação de Saque (POST)
+Subtrai um valor do saldo do usuário autenticado.
 
-    - ```URL: http://localhost:8000/api/sacar/```
-    - Método: **POST**
+- URL: ```http://localhost:8000/api/sacar/```
+- Método: ```POST```
+- Cabeçalho (Header): 
+    - Header Key: ```Authorization```
+    - Header Value: ```Token a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2```
+- Corpo (Body) JSON: <br> <br>
+    ```
+    {
+        "valor": "50.00"
+    }
+    ```
 
-- Acesse a URL http://localhost:8000/api/sacar/ no seu navegador. No campo "Content", cole o seguinte JSON para sacar R$ 50,00 da conta do correntista de ID 2:
+### 4. Operação de Pagamento (POST)
+Subtrai um valor do saldo do usuário autenticado.
 
-```
-{
-    "correntista_id": 2,
-    "valor": "50.00"
-}
-```
-- Clique no botão POST.
+- URL: ```http://localhost:8000/api/pagar/```
+- Método: ```POST```
+- Cabeçalho (Header): 
+    - Header Key: ```Authorization```
+    - Header Value: ```Token a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2```
+- Corpo (Body) JSON: <br> <br>
+    ```
+    {
+        "valor": "99.90",
+        "descricao": "Conta de Internet"
+    }
+    ```
 
-**4. Operação de Pagamento (POST)**
-- Funciona como um saque, mas registra uma descrição específica para o débito.
+### 5. Operação de Transferência (POST)
+Transfere um valor do usuário autenticado (origem) para outro correntista (destino).
 
-    - URL: ```http://localhost:8000/api/pagar/```
-    - Método: **POST**
+- URL: ```http://localhost:8000/api/transferir/```
+- Método: ```POST```
+- Cabeçalho (Header): 
+    - Header Key: ```Authorization```
+    - Header Value: ```Token a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2```
+- Corpo (Body) JSON: <br> <br>
+    ```
+    {
+        "correntista_destino_id": 2,
+        "valor": "150.00"
+    }
+    ```
+    A API irá debitar 150.00 da conta do joao e creditar na conta da maria.
 
-- Acesse a URL http://localhost:8000/api/pagar/ no seu navegador. No campo "Content", cole o seguinte JSON para pagar uma "Conta de Internet" de R$ 99,90 usando a conta do correntista de ID 1:
-
-```
-{
-    "correntista_id": 1,
-    "valor": "99.90",
-    "descricao": "Conta de Internet"
-}
-```
-- Clique no botão POST.
-
-**5. Operação de Transferência (POST)**
-- Esta operação transfere um valor entre duas contas, debitando da origem e creditando no destino.
-
-    - URL: ```http://localhost:8000/api/transferir/```
-    - Método: **POST**
-
-- Acesse a URL http://localhost:8000/api/transferir/ no seu navegador. No campo "Content", cole o seguinte JSON para transferir R$ 150,00 da conta de origem (ID 2) para a conta de destino (ID 3):
-
-```
-{
-    "correntista_origem_id": 2,
-    "correntista_destino_id": 3,
-    "valor": "150.00"
-}
-```
-- Clique no botão POST. A API irá realizar as duas movimentações (débito e crédito) e atualizar o saldo de ambas as contas.
-
-# Parando a aplicação
-Para parar todos os containers relacionados ao projeto, pressione Ctrl + C no terminal onde o docker-compose up está rodando, ou execute o seguinte comando no diretório raiz do projeto:
+## Parando a aplicação
+Para parar todos os containers relacionados ao projeto, execute o seguinte comando no diretório raiz:
 
 ```
 docker-compose down
 ```
 
-Este comando irá parar e remover os containers, mas os dados do banco de dados serão preservados no volume do Docker.
+Este comando irá parar e remover os containers. Se quiser apagar também o volume do banco de dados (recomeçar do zero), use ```docker-compose down -v```.
