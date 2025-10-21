@@ -1,34 +1,53 @@
-version: '3.8'
+    version: '3.8'
 
-services:
-  db:
-    image: postgres:15
-    container_name: db_postgres
+    services:
+      db:
+        image: postgres:15
+        container_name: db_postgres
+        volumes:
+          - postgres_data:/var/lib/postgresql/data/
+        environment:
+          - POSTGRES_DB=api-db
+          - POSTGRES_USER=admin
+          - POSTGRES_PASSWORD=admin
+        ports:
+          - "5432:5432"
+
+      backend:
+        build:
+          context: ./backend    
+          dockerfile: Dockerfile  
+        container_name: api_django
+        command: python manage.py runserver 0.0.0.0:8000
+        volumes:
+          - ./backend:/app
+        ports:
+          - "8000:8000"
+        environment:
+          - DB_NAME=api-db
+          - DB_USER=admin
+          - DB_PASSWORD=admin
+          - DB_HOST=db
+          - DB_PORT=5432
+        depends_on:
+          - db
+
+      frontend:
+        build:
+          context: ./frontend   
+          dockerfile: Dockerfile 
+        container_name: react_app
+        volumes:
+          - ./frontend:/app
+          - /app/node_modules
+        ports:
+          - "3000:3000"
+        environment:
+          - CHOKIDAR_USEPOLLING=true
+        depends_on:
+          - backend
+
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
-    environment:
-      - POSTGRES_DB=api-db
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
-    ports:
-      - "5432:5432"
+      postgres_data:
+    
 
-  web:
-    build: .
-    container_name: api_django
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - ./backend:/app
-    ports:
-      - "8000:8000"
-    environment:
-      - DB_NAME=api-db
-      - DB_USER=admin
-      - DB_PASSWORD=admin
-      - DB_HOST=db
-      - DB_PORT=5432
-    depends_on:
-      - db
-
-volumes:
-  postgres_data:
