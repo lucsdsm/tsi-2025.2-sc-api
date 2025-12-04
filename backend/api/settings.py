@@ -26,11 +26,12 @@ SECRET_KEY = 'django-insecure-da#y*%-jtd9mho&^9*!)m@nb5(rxylx=_f#qy*vu8o$5$g+o4r
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # Deve estar no topo para WebSockets
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -41,6 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'channels',
     'core',
 ]
 
@@ -73,6 +75,15 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'api.wsgi.application'
+ASGI_APPLICATION = 'api.asgi.application'
+
+# Channels Configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
 
 
 # Database
@@ -143,9 +154,25 @@ REST_FRAMEWORK = {
 
 # Define quais origens (endereços) podem fazer requisições para a API
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000", # Endereço do nosso frontend React
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
 
+# Permite todas as origens em desenvolvimento (use CORS_ALLOWED_ORIGINS em produção)
+CORS_ALLOW_ALL_ORIGINS = True
+
 # Permite que cookies sejam enviados (útil para outros tipos de autenticação)
 CORS_ALLOW_CREDENTIALS = True
+
+# Headers permitidos para WebSocket
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]

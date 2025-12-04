@@ -5,13 +5,36 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.generics import ListAPIView
 
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
 from .models import Movimentacao, Correntista
 from .serializers import (
     MovimentacaoSerializer,
     OperacaoBasicaSerializer,
     PagamentoSerializer,
-    TransferenciaSerializer
+    TransferenciaSerializer,
+    SaldoSerializer
 )
+
+
+def enviar_notificacao(user_id, mensagem, tipo='info'):
+    """
+    Envia uma notificação via WebSocket para um usuário específico
+    """
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"notifications_{user_id}",
+        {
+            'type': 'send_notification',
+            'notification': {
+                'message': mensagem,
+                'tipo': tipo,
+                'timestamp': str(Movimentacao.objects.latest('data_operacao').data_operacao) if Movimentacao.objects.exists() else ''
+            }
+        }
+    )
+
 
 # 1. EXTRATO
 class ExtratoView(ListAPIView):
@@ -26,6 +49,19 @@ class ExtratoView(ListAPIView):
         correntista = self.request.user.correntista
         # Filtra as movimentações apenas para esse correntista
         return Movimentacao.objects.filter(correntista=correntista).order_by('-data_operacao')
+
+# 1.1 SALDO
+@api_view(['GET'])
+def saldo_view(request):
+    """
+    View para retornar o saldo atual do correntista.
+    """
+    try:
+        correntista = request.user.correntista
+        serializer = SaldoSerializer(correntista)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Correntista.DoesNotExist:
+        return Response({"erro": "Correntista não encontrado."}, status=status.HTTP_404_NOT_FOUND)
     
 # 2. PAGAMENTO
 @api_view(['POST'])
@@ -57,6 +93,14 @@ def pagamento_view(request):
             valor_operacao=valor,
             descricao=f"Pagamento: {descricao}"
         )
+        
+        # Enviar notificação via WebSocket
+        enviar_notificacao(
+            correntista.user.id,
+            f"Pagamento de R$ {valor:.2f} ({descricao}) realizado com sucesso.",
+            'success'
+        )
+        
         return Response({"sucesso": "Pagamento realizado com sucesso."}, status=status.HTTP_200_OK)
     
     except Correntista.DoesNotExist:
@@ -110,10 +154,23 @@ def transferencia_view(request):
         correntista_origem.save()
         correntista_destino.save()
 
+        # Enviar notificações via WebSocket
+        enviar_notificacao(
+            correntista_origem.user.id, 
+            f"Transferência de R$ {valor:.2f} para {correntista_destino.nome_correntista} realizada com sucesso.",
+            'success'
+        )
+        enviar_notificacao(
+            correntista_destino.user.id,
+            f"Você recebeu R$ {valor:.2f} de {correntista_origem.nome_correntista}.",
+            'info'
+        )
+
         return Response({"sucesso": "Transferência realizada com sucesso."}, status=status.HTTP_200_OK)
     
     except Correntista.DoesNotExist:
         return Response({"erro": "Correntista de origem ou destino não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
     
 # 4. SAQUE
 @api_view(['POST'])
@@ -144,6 +201,14 @@ def saque_view(request):
             valor_operacao=valor,
             descricao="Saque realizado"
         )
+        
+        # Enviar notificação via WebSocket
+        enviar_notificacao(
+            correntista.user.id,
+            f"Saque de R$ {valor:.2f} realizado com sucesso.",
+            'success'
+        )
+        
         return Response({"sucesso": "Saque realizado com sucesso."}, status=status.HTTP_200_OK)
     
     except Correntista.DoesNotExist:
@@ -175,6 +240,14 @@ def deposito_view(request):
             valor_operacao=valor,
             descricao="Depósito realizado"
         )
+        
+        # Enviar notificação via WebSocket
+        enviar_notificacao(
+            correntista.user.id,
+            f"Depósito de R$ {valor:.2f} realizado com sucesso.",
+            'success'
+        )
+        
         return Response({"sucesso": "Depósito realizado com sucesso."}, status=status.HTTP_200_OK)
     
     except Correntista.DoesNotExist:

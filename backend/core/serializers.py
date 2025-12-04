@@ -2,6 +2,11 @@ from rest_framework import serializers
 from django.core.validators import MinValueValidator
 from .models import Movimentacao, Correntista
 
+class SaldoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Correntista
+        fields = ['saldo']
+
 class OperacaoBasicaSerializer(serializers.Serializer): # Serializer básico para operações de Crédito e Débito
     valor = serializers.DecimalField(
         max_digits=10, 
@@ -24,7 +29,8 @@ class MovimentacaoSerializer(serializers.ModelSerializer): # Serializer para o m
     class Meta:
         model = Movimentacao
         fields = [
-            'id', 
+            'id',
+            'tipo_operacao',
             'tipo_operacao_display',
             'valor_operacao', 
             'data_operacao', 
